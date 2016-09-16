@@ -1,0 +1,21 @@
+{
+    "name": "maxlen/yii2_parse_by_domain",
+    "description": "Yii2 domain parser",
+    "type": "yii2-extension",
+    "keywords": ["yii2", "extension", "domain", "parser"],
+    "license": "BSD-4-Clause",
+    "require": {
+        "php": ">=5.4.0"
+    },
+    "authors": [
+        {
+            "name": "Maxim",
+            "email": "maxlen@inbox.ru"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "\\maxlen\\domainparser\\": ""
+        }
+    }
+}
