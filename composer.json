@@ -17,5 +17,9 @@
         "psr-4": {
             "\\maxlen\\domainparser\\": ""
         }
-    }
+    },
+    "require": {
+		"electrolinux/phpquery": "dev-master",
+        "phpcasperjs/phpcasperjs": "^1.0"
+	}
 }
