@@ -8,6 +8,7 @@ use common\helpers\ProxyHelpers;
 use maxlen\parsedomain\models\ParsedomainDomains;
 use maxlen\parsedomain\models\ParsedomainLinks;
 use maxlen\parsedomain\models\ParsedomainFiles;
+use common\components\CliLimitter;
 
 class Parsedomain
 {
@@ -24,7 +25,6 @@ class Parsedomain
      */
     public static function getFromDomain($site, $filetypes)
     {
-        $params = self::getParams(['filetypes' => ParsedomainDomains::paramFromStr($filetypes)]);
         $site = self::cleanUrl($site);
 
 //        $domain = self::getDomain($site, true);
@@ -51,24 +51,52 @@ class Parsedomain
         
         return;
     }
+
+    public static function startParse($params)
+    {
+        $params = ParsedomainDomains::getParams($params);
+        $site = "http://" . $params['domain'];
+
+        $myDomain = ParsedomainDomains::find()->where(['domain' => $site])->limit(1)->one();
+        if (is_null($myDomain)) {
+            $myDomain = ParsedomainDomains::createDomain($site, $params);
+
+            $newLink = new ParsedomainLinks;
+            $newLink->link = $site;
+            $newLink->domain_id = $myDomain->id;
+            $newLink->save();
+        } else {
+            ParsedomainLinks::cleanNotFinished($myDomain->id);
+        }
+
+
+        $params['domainId'] = $myDomain->id;
+
+        self::parseByLink($params);
+
+        return;
+    }
     
     public static function parseByLink($params)
     {
         $i = $processCount = 1;
-        while ($link = ParserLinks::find()->where(['status' => self::TYPE_NOT_PARSED])->limit(1)->one()) {
-            $link = ParserLinks::setAsBeginAndGet($i, $params['domainId']);
-        
-            $command = "php yii parser/parser/grab-links {$params['domainId']} {$link->id} ";
-            if($i > 20) {
-                $command .= "1 > /dev/null &";
+        while ($link = ParsedomainLinks::find()->where(['status' => self::TYPE_NOT_PARSED])->limit(1)->one()) {
+            $link = ParsedomainLinks::setAsBeginAndGet($i, $params['domainId']);
+
+            $cr = new \vova07\console\ConsoleRunner(['file' => '@runnerScript']);
+            $cr->run("parsedomain/parsedomain/grab-links {$params['domainId']}");
+
+//            $command = "php yii parsedomain/parsedomain/process {$params['domainId']} {$link->id} ";
+//            if($i > 20) {
+//                $command .= "1 > /dev/null &";
                 $processCount++;
-            }
-            
-            $i++;
-            
+//            }
+
+//            $i++;
+
             exec($command);
             
-            if($processCount > self::FLOWS_COUNT) {
+            if($processCount > ParsedomainDomains::MAX_PROC) {
                 break;
             }
         }
@@ -78,7 +106,7 @@ class Parsedomain
         
         echo PHP_EOL. " ALL DONE ". PHP_EOL;
         
-        mail('maxim.gavrilenko@pdffiller.com', 'site parser is finished', 'Te site parser for ' . $params['domain'] . ' is finished');
+//        mail('maxim.gavrilenko@pdffiller.com', 'site parser is finished', 'Te site parser for ' . $params['domain'] . ' is finished');
         
         return;
     }
@@ -161,7 +189,7 @@ class Parsedomain
                 if ($approved) {
                     if (isset($params['exts']) && self::isHtml($href, $params['exts'], true)) {
                         // save to spider_forms
-                        ParserForms::createForm($domain->id, $href);
+                        ParsedomainFiles::createForm($domain->id, $href);
                     } elseif (self::isHtml($href)) {
                         $newLink = new ParserLinks;
                         $newLink->domain_id = $domain->id;
@@ -414,24 +442,5 @@ class Parsedomain
         }
 
         return $url;
-    }
-    
-    /**
-     * Get parameters for parser
-     * @return array
-     */
-    public static function getParams($params = []) {
-        $result = [
-            'exceptions' => ['mailto:', '#'],
-            'parseSubdomains' => true,
-        ];
-
-        if (!empty($params)) {
-            if (isset($params['filetypes'])) {
-                $result['filetypes'] = $params['filetypes'];
-            }
-        }
-
-        return $result;
     }
 }

@@ -3,8 +3,8 @@
 use yii\console\Controller;
 use yii\db\Exception;
 use maxlen\parsedomain\handlers\Parsedomain;
-use maxlen\parsedomain\models\ParserDomains;
-use maxlen\parsedomain\models\ParserLinks;
+use maxlen\parsedomain\models\ParsedomainDomains;
+use maxlen\parsedomain\models\ParsedomainLinks;
 use maxlen\proxy\helpers\Proxy;
 use common\components\CliLimitter;
 
@@ -16,10 +16,54 @@ use common\components\CliLimitter;
  */
 class ParsedomainController extends Controller
 {
-    const MAX_PROC = 10;
+    public function actionProcess()
+    {
+        $procDomain = ParsedomainDomains::getProcesssdDomain();
+//        var_dump($procDomain);
+
+        if (empty($procDomain)) {
+            echo PHP_EOL . "There are nothing to parse";
+            return;
+        }
+
+        echo PHP_EOL . "PROCESSED DOMAIN: {$procDomain->domain} - {$procDomain->id}";
+
+        $limitter = new CliLimitter();
+        $limitter->maxProc = ParsedomainDomains::MAX_PROC;
+        $limitter->process = "{$this->action->controller->id}_{$this->action->id}_{$procDomain->id}";
+        $limitter->run();
+
+        Proxy::getRandomProxy();
+
+        $link = ParsedomainLinks::find()->where(['id' => $linkId])->limit(1)->one();
+
+        if(is_null($link)) {
+            return;
+        }
+
+        $processId = $link->process_id;
+        Parsedomain::grabLinks($link, $params);
+
+        Parsedomain::parseByLink(
+            [
+                'domain' => $procDomain->domain,
+                'domainId' => $procDomain->id,
+                'filetypes' => $procDomain->filetypes
+            ]
+        );
+//        die();
+    }
+
+
+
 
     public function actionGrabLinks($domainId, $linkId, $startNewProcess = 0)
     {
+        $processedDomain = ParsedomainDomains::getProcesssdDomain();
+
+        var_dump($processedDomain);
+        die();
+
         $limitter = new CliLimitter();
         $limitter->maxProc = self::MAX_PROC;
         $limitter->process = "{$this->action->controller->id}_{$this->action->id}_{$domainId}";
@@ -38,27 +82,21 @@ class ParsedomainController extends Controller
 
         Proxy::getRandomProxy();
 
-        $link = ParserLinks::find()->where(['id' => $linkId])->limit(1)->one();
+        $link = ParsedomainLinks::find()->where(['id' => $linkId])->limit(1)->one();
 
         if(is_null($link)) {
             return;
         }
 
         $processId = $link->process_id;
-        Parser::grabLinks($link, $params);
+        Parsedomain::grabLinks($link, $params);
 
         if($startNewProcess != 0) {
-            $link = ParserLinks::setAsBeginAndGet($processId, $domain->id);
+            $link = ParsedomainLinks::setAsBeginAndGet($processId, $domain->id);
 
             if (!is_null($link)) {
-                $command = new \console\modules\bingads\controllers\KeywordsReportController(
-                    'KeywordsReport',
-                    'bingads'
-                );
-                $command->actionGrab();
-
-                $command = "php yii parser/parser/grab-links {$domain->id} {$link->id} 1 > /dev/null &";
-                exec($command);
+                $cr = new \vova07\console\ConsoleRunner(['file' => '@runnerScript']);
+                $cr->run("parsedomain/parsedomain/grab-links {$params['domainId']}");
             }
         }
 

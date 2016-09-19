@@ -14,6 +14,10 @@ use Yii;
  */
 class ParsedomainDomains extends \yii\db\ActiveRecord
 {
+    const ZERO_DATE = '0000-00-00 00:00:00';
+    const ROWS_BY_ONCE = 1;
+    const MAX_PROC = 10;
+
     /**
      * @inheritdoc
      */
@@ -56,6 +60,41 @@ class ParsedomainDomains extends \yii\db\ActiveRecord
             'finish_date' => 'Finish Date',
         ];
     }
+
+    public static function getProcesssdDomain()
+    {
+        return self::find()->where(
+            'begin_date >= :zerodate AND finish_date = :zerodate',
+            [':zerodate' => self::ZERO_DATE]
+        )->orderBy(['begin_date' => SORT_DESC])->limit(self::ROWS_BY_ONCE)->one();
+    }
+
+    public static function strToArray($str, $fromJson = false, $toJson = false)
+    {
+        return explode(',', $str);
+    }
+
+    /**
+     * Get parameters for parser
+     * @return array
+     */
+    public static function getParams($params = []) {
+        $result = [
+            'exceptions' => ['mailto:', '#'],
+            'parseSubdomains' => true,
+        ];
+
+        $result = array_merge($result, $params);
+
+        if (!empty($params)) {
+            if (isset($params['filetypes'])) {
+                $result['filetypes'] = $params['filetypes'];
+            }
+        }
+
+        return $result;
+    }
+
     
     public static function createDomain($domainName)
     {
