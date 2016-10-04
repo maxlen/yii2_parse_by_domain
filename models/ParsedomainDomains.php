@@ -61,12 +61,24 @@ class ParsedomainDomains extends \yii\db\ActiveRecord
         ];
     }
 
-    public static function getProcesssdDomain()
+    public static function getProcessedDomain()
     {
-        return self::find()->where(
-            'begin_date >= :zerodate AND finish_date = :zerodate',
+        $domain = self::find()->where(
+            'begin_date > :zerodate AND finish_date = :zerodate',
             [':zerodate' => self::ZERO_DATE]
         )->orderBy(['begin_date' => SORT_DESC])->limit(self::ROWS_BY_ONCE)->one();
+
+
+        if (empty($domain)) {
+            $domain = self::find()->orderBy(['id' => SORT_ASC])->limit(self::ROWS_BY_ONCE)->one();
+
+            if (!empty($domain)) {
+                $domain->begin_date = date('Y-m-d H:i:s');
+                $domain->save();
+            }
+        }
+
+        return $domain;
     }
 
     public static function strToArray($str, $fromJson = false, $toJson = false)

@@ -16,13 +16,13 @@ use common\components\CliLimitter;
  */
 class ParsedomainController extends Controller
 {
-    public function actionProcess()
+    public function actionProcess($cronId)
     {
         $procDomain = ParsedomainDomains::getProcesssdDomain();
 //        var_dump($procDomain);
 
         if (empty($procDomain)) {
-            echo PHP_EOL . "There are nothing to parse";
+            echo PHP_EOL . "There are nothing to parse (THROW EXC)";
             return;
         }
 
@@ -35,7 +35,7 @@ class ParsedomainController extends Controller
 
         Proxy::getRandomProxy();
 
-        $link = ParsedomainLinks::find()->where(['id' => $linkId])->limit(1)->one();
+        $link = ParsedomainLinks::find()->where(['domain_id' => $procDomain->id])->limit(1)->one();
 
         if(is_null($link)) {
             return;
@@ -57,55 +57,52 @@ class ParsedomainController extends Controller
 
 
 
-    public function actionGrabLinks($domainId, $linkId, $startNewProcess = 0)
+    public function actionGrabLinks($processId)
     {
-        $processedDomain = ParsedomainDomains::getProcesssdDomain();
+        $domain = ParsedomainDomains::getProcessedDomain();
 
-        var_dump($processedDomain);
-        die();
-
-        $limitter = new CliLimitter();
-        $limitter->maxProc = self::MAX_PROC;
-        $limitter->process = "{$this->action->controller->id}_{$this->action->id}_{$domainId}";
-        $limitter->run();
-
-        $params = Parser::getParams();
-
-        $domain = ParserDomains::find()->where(['id' => $domainId])->limit(1)->one();
-
-        if(is_null($domain)) {
-            echo PHP_EOL. " THERE IS NO DOMAIN id = {$domainId} IN DB". PHP_EOL;
+        if(empty($domain)) {
+            echo PHP_EOL. "THERE IS NO DOMAIN TO PROCESS". PHP_EOL;
             return;
         }
 
-        $params['domain'] = $domain;
+        $limitter = new CliLimitter();
+        $limitter->maxProc = ParsedomainLinks::MAX_PROC;
+        $limitter->process = "{$this->action->controller->id}_{$this->action->id}_{$domain->id}_{$processId}";
+        $limitter->run();
 
         Proxy::getRandomProxy();
 
-        $link = ParsedomainLinks::find()->where(['id' => $linkId])->limit(1)->one();
+        $link = ParsedomainLinks::find()->where(['domain_id' => $domain->id])->limit(1)->one();
 
-        if(is_null($link)) {
+        if(empty($link)) {
+            ParsedomainLinks::createRow(['domain_id' => $domain->id, 'link' => $domain->domain]);
+            echo PHP_EOL. "created first link for parse". PHP_EOL;
             return;
         }
 
-        $processId = $link->process_id;
-        Parsedomain::grabLinks($link, $params);
+        $link = ParsedomainLinks::setAsBeginAndGet($processId, $domain->id);
 
-        if($startNewProcess != 0) {
-            $link = ParsedomainLinks::setAsBeginAndGet($processId, $domain->id);
+        if (!empty($link)) {
+            Parsedomain::grabLinks($link);
+        }
+
+//        if($startNewProcess != 0) {
+//            $link = ParsedomainLinks::setAsBeginAndGet($processId, $domain->id);
 
             if (!is_null($link)) {
-                $cr = new \vova07\console\ConsoleRunner(['file' => '@runnerScript']);
-                $cr->run("parsedomain/parsedomain/grab-links {$params['domainId']}");
-            }
-        }
+//                $cr = new \vova07\console\ConsoleRunner(['file' => '@runnerScript']);
+//                $cr->run("parsedomain/parsedomain/grab-links {$params['domainId']}");
+//            }
+//        }
 
         $someForParse = ParserLinks::find()->where(
             'status != :status AND domain_id = :domain_id',
-            [':status' => Parser::TYPE_PARSED, ':domain_id' => $domain->id]
+            [':status' => ParsedomainLinks::TYPE_PARSED, ':domain_id' => $domain->id]
         )->limit(1)->one();
-        if(is_null($someForParse)) {
-            ParserDomains::setAsFinished($domain->id);
+
+        if(empty($someForParse)) {
+            ParsedomainDomains::setAsFinished($domain->id);
         }
     }
 }

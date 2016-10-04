@@ -12,11 +12,6 @@ use common\components\CliLimitter;
 
 class Parsedomain
 {
-    const TYPE_NOT_PARSED = 0;
-    const TYPE_PROCESS = 1;
-    const TYPE_PARSED = 2;
-    const TYPE_DESIRED = 3;
-    
     const FLOWS_COUNT = 10;
 
     /**
@@ -77,43 +72,43 @@ class Parsedomain
         return;
     }
     
-    public static function parseByLink($params)
-    {
-        $i = $processCount = 1;
-        while ($link = ParsedomainLinks::find()->where(['status' => self::TYPE_NOT_PARSED])->limit(1)->one()) {
-            $link = ParsedomainLinks::setAsBeginAndGet($i, $params['domainId']);
-
-            $cr = new \vova07\console\ConsoleRunner(['file' => '@runnerScript']);
-            $cr->run("parsedomain/parsedomain/grab-links {$params['domainId']}");
-
-//            $command = "php yii parsedomain/parsedomain/process {$params['domainId']} {$link->id} ";
-//            if($i > 20) {
-//                $command .= "1 > /dev/null &";
-                $processCount++;
+//    public static function parseByLink($params)
+//    {
+//        $i = $processCount = 1;
+//        while ($link = ParsedomainLinks::find()->where(['status' => self::TYPE_NOT_PARSED])->limit(1)->one()) {
+//            $link = ParsedomainLinks::setAsBeginAndGet($i, $params['domainId']);
+//
+//            $cr = new \vova07\console\ConsoleRunner(['file' => '@runnerScript']);
+//            $cr->run("parsedomain/parsedomain/grab-links {$params['domainId']}");
+//
+////            $command = "php yii parsedomain/parsedomain/process {$params['domainId']} {$link->id} ";
+////            if($i > 20) {
+////                $command .= "1 > /dev/null &";
+//                $processCount++;
+////            }
+//
+////            $i++;
+//
+//            exec($command);
+//
+//            if($processCount > ParsedomainDomains::MAX_PROC) {
+//                break;
 //            }
-
-//            $i++;
-
-            exec($command);
-            
-            if($processCount > ParsedomainDomains::MAX_PROC) {
-                break;
-            }
-        }
-        
-//        ParsedomainDomains::setAsFinished($params['domainId']);
-//        ParserLinks::clearTable();
-        
-        echo PHP_EOL. " ALL DONE ". PHP_EOL;
-        
-//        mail('maxim.gavrilenko@pdffiller.com', 'site parser is finished', 'Te site parser for ' . $params['domain'] . ' is finished');
-        
-        return;
-    }
+//        }
+//
+////        ParsedomainDomains::setAsFinished($params['domainId']);
+////        ParserLinks::clearTable();
+//
+//        echo PHP_EOL. " ALL DONE ". PHP_EOL;
+//
+////        mail('maxim.gavrilenko@pdffiller.com', 'site parser is finished', 'Te site parser for ' . $params['domain'] . ' is finished');
+//
+//        return;
+//    }
     
-    public static function grabLinks($site, $params)
+    public static function grabLinks($site, $params = [])
     { 
-        $domain = $params['domain'];
+        $domain = $site->domain;
         
         $result = ProxyHelpers::getHtmlByUrl($site->link, ['getInfo' => true, 'content_type' => ['html']]);
             
@@ -123,18 +118,14 @@ class Parsedomain
         }
 
         if (!$result || in_array($result['info']['http_code'], [301, 302])) {
-            $site->link = $result['info']['redirect_url'];
-            
-            if(!$site->save()) {
-                $site->delete();
+            $site = $site->saveOrDelete(['link' => $result['info']['redirect_url']]);
+            if (!$site) {
                 return;
             }
-
             $result = ProxyHelpers::getHtmlByUrl($site->link, ['getInfo' => true, 'content_type' => ['html']]);
         }
         
         if ($result) {
-            
             $parseDom = parse_url($site->link);
 
             if ($parseDom['host'] != '') {
@@ -145,10 +136,10 @@ class Parsedomain
             $links = pq('a');
 
             foreach ($links as $link) {
-
                 $href = pq($link)->attr('href');
 
-                if (in_array($href, $params['exceptions'])) {
+                $isExcept = strpos($href, ParsedomainLinks::$exceptions);
+                if ($isExcept !== false && $isExcept == 0) {
                     continue;
                 }
 
@@ -157,7 +148,7 @@ class Parsedomain
                 if (!is_null($hrefDomain)) {
                     $isSource = strpos(self::cleanDomain($hrefDomain), self::cleanDomain($domain->domain));
                     if($isSource !== false) {
-                        if(!$params['parseSubdomains'] && $isSource != 0) {
+                        if(!ParsedomainLinks::$parseSubdomains && $isSource != 0) {
                             continue;
                         }
                     }
@@ -191,7 +182,8 @@ class Parsedomain
                         // save to spider_forms
                         ParsedomainFiles::createForm($domain->id, $href);
                     } elseif (self::isHtml($href)) {
-                        $newLink = new ParserLinks;
+//                        ParserLinks;
+                        $newLink = new ParsedomainLinks;
                         $newLink->domain_id = $domain->id;
                         $newLink->link = $href;
                         $newLink->save();
