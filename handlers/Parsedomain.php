@@ -132,67 +132,76 @@ class Parsedomain
                 $siteDomain = $parseDom['host'];
             }
 
+            $siteProtocol = 'http://';
+
+            if($parseDom['scheme'] == 'https'){
+                $siteProtocol = 'https://';
+            }
+
             \phpQuery::newDocument($result['page']);
             $links = pq('a');
 
             foreach ($links as $link) {
-                $href = pq($link)->attr('href');
+                echo PHP_EOL . "---------------------------------";
 
-                $isExcept = strpos($href, ParsedomainLinks::$exceptions);
-                if ($isExcept !== false && $isExcept == 0) {
+                $href = pq($link)->attr('href');
+                echo PHP_EOL . $href;
+
+                if (ParsedomainLinks::isLinkInExcept($href)) {
+                    echo PHP_EOL . "IN EXCEPTION";
                     continue;
                 }
 
                 $hrefDomain = self::getDomain($href);
 
+                echo " --- {$hrefDomain} - " . self::cleanDomain($hrefDomain) . " -> " . self::cleanDomain($domain->domain);
+
                 if (!is_null($hrefDomain)) {
                     $isSource = strpos(self::cleanDomain($hrefDomain), self::cleanDomain($domain->domain));
                     if($isSource !== false) {
                         if(!ParsedomainLinks::$parseSubdomains && $isSource != 0) {
+                            echo " --- other domain (sub)";
                             continue;
                         }
                     }
                     else {
+                        echo " --- OTHER DOMAIN";
                         continue;
                     }
                 }
 
                 if (is_null($hrefDomain) && isset($siteDomain)) {
                     if (is_null($hrefDomain)) {
-                        $href = (strpos($href, '/') !== FALSE && strpos($href, '/') == 0) ? "{$siteDomain}{$href}" : "{$siteDomain}/{$href}";
+                        $href = self::cleanUrl($href);
+                        $href = (strpos($href, '/') !== false && strpos($href, '/') == 0) ? "{$siteDomain}{$href}" : "{$siteDomain}/{$href}";
                     } else {
                         $href = self::cleanDomain($href);
                     }
 
-                    $href = "http://" . $href;
+                    $href = $siteProtocol . $href;
                 }
 
-                $href = self::cleanUrl($href);
-                
-                $approved = true;
-                foreach ($params['exceptions'] as $exception) {
-                    if (stripos($href, $exception)) {
-                        $approved = false;
-                        break;
-                    }
-                }
+                echo PHP_EOL . $href;
 
-                if ($approved) {
-                    if (isset($params['exts']) && self::isHtml($href, $params['exts'], true)) {
+                if (!self::isHtml($href, $domain->getExceptions())) {
+                    if (self::isHtml($href, $domain->getFiletypes(), true)) {
                         // save to spider_forms
-                        ParsedomainFiles::createForm($domain->id, $href);
+                        echo " --- P D F ---";
+                        ParsedomainFiles::createFile($domain->id, $href);
                     } elseif (self::isHtml($href)) {
-//                        ParserLinks;
-                        $newLink = new ParsedomainLinks;
-                        $newLink->domain_id = $domain->id;
-                        $newLink->link = $href;
-                        $newLink->save();
+                        $newLink = ParsedomainLinks::createRow(
+                            [
+                                'domain_id' => $domain->id,
+                                'link' => $href,
+                                'create_date' => date('Y-m-d H:i:s'),
+                            ]
+                        );
+                        echo $newLink ? " --- ADDED NEW LINK" : " --- FAIL";
                     }
                 }
             }
-            
-            $site->status = self::TYPE_PARSED;
-            $site->save();
+
+            $site->setAsFinished();
         }
         else {
             $site->delete();
@@ -403,6 +412,10 @@ class Parsedomain
     {
         $ext = pathinfo($url, PATHINFO_EXTENSION);
 
+        if($ext == '' && !empty($extensions)) {
+            return false;
+        }
+
         if (empty($extensions)) {
             return in_array(
                 $ext,
@@ -413,8 +426,9 @@ class Parsedomain
             if ($yes) {
                 return in_array($ext, $extensions) ? true : false;
             }
-            
-            return !in_array($ext, $extensions) ? true : false;
+            else {
+                return !in_array($ext, $extensions) ? true : false;
+            }
         }
     }
 

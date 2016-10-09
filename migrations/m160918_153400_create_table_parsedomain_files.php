@@ -4,7 +4,7 @@ use yii\db\Migration;
 
 class m160918_153400_create_table_parsedomain_files extends Migration
 {
-    private $_table = '{{parsedomain_forms}}';
+    private $_table = '{{parsedomain_files}}';
 
     public function init()
     {

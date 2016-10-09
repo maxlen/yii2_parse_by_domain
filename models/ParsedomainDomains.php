@@ -43,7 +43,7 @@ class ParsedomainDomains extends \yii\db\ActiveRecord
             [['domain'], 'required'],
             [['domain'], 'unique'],
             [['f_id', 'cron_id', 'create_date', 'begin_date', 'finish_date'], 'safe'],
-            [['domain', 'filetypes'], 'string', 'max' => 255],
+            [['domain', 'filetypes', 'exceptions'], 'string', 'max' => 255],
         ];
     }
 
@@ -129,5 +129,15 @@ class ParsedomainDomains extends \yii\db\ActiveRecord
             ['finish_date' => date('Y-m-d H:i:s')],
             'id = :id', [':id' => $id]
         );
+    }
+
+    public function getExceptions()
+    {
+        return json_decode($this->exceptions);
+    }
+
+    public function getFiletypes()
+    {
+        return json_decode($this->filetypes);
     }
 }

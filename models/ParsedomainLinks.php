@@ -15,10 +15,9 @@ use maxlen\parser\helpers\Parser;
  */
 class ParsedomainLinks extends \yii\db\ActiveRecord
 {
-    const TYPE_NOT_PARSED = 0;
-    const TYPE_PROCESS = 1;
-    const TYPE_PARSED = 2;
-    const TYPE_DESIRED = 3;
+    const TYPE_NOT_PARSED = 'none';
+    const TYPE_PROCESS = 'process';
+    const TYPE_PARSED = 'parsed';
 
     const MAX_PROC = 1;
 
@@ -51,8 +50,8 @@ class ParsedomainLinks extends \yii\db\ActiveRecord
         return [
             [['link'], 'required'],
             ['link', 'unique'],
-            [['status', 'domain_id', 'process_id'], 'integer'],
-            [['create_date', 'begin_date', 'finish_date'], 'safe'],
+            [['domain_id', 'process_id'], 'integer'],
+            [['create_date', 'begin_date', 'finish_date', 'status'], 'safe'],
             [['link'], 'string', 'max' => 255],
         ];
     }
@@ -75,7 +74,14 @@ class ParsedomainLinks extends \yii\db\ActiveRecord
      */
     public function getDomain()
     {
-        return $this->hasOne(ParserDomains::className(), ['id' => 'domain_id']);
+        return $this->hasOne(ParsedomainDomains::className(), ['id' => 'domain_id']);
+    }
+
+    public function setAsFinished()
+    {
+        $this->finish_date = date('Y-m-d H:i:s');
+        $this->status = self::TYPE_PARSED;
+        return $this->save();
     }
     
     public static function clearTable() {
@@ -85,6 +91,10 @@ class ParsedomainLinks extends \yii\db\ActiveRecord
     public static function createRow($data)
     {
         if (empty($data)) {
+            return false;
+        }
+
+        if (!empty(self::isAlreadyLink($data['domain_id'], $data['link']))) {
             return false;
         }
 
@@ -98,9 +108,9 @@ class ParsedomainLinks extends \yii\db\ActiveRecord
     public static function setAsBeginAndGet($processId, $domainId)
     {
         self::getDb()->createCommand(
-            'UPDATE ' . self::tableName() . ' SET status = ' . self::TYPE_PROCESS
-            . ', process_id = ' . $processId . ', begin_date = "' . self:: ZERO_DATE . '"'
-            . ' WHERE status = ' . self::TYPE_NOT_PARSED . ' AND domain_id = ' . $domainId . ' LIMIT 1'
+            "UPDATE " . self::tableName() . " SET status = '" . self::TYPE_PROCESS . "'"
+            . ", process_id = " . $processId . ", begin_date = '" . date('Y-m-d H:i:s') . "'"
+            . " WHERE status = '" . self::TYPE_NOT_PARSED . "' AND domain_id = " . $domainId . " LIMIT 1"
         )->execute();
         
         return self::find()->where(['status' => self::TYPE_PROCESS, 'process_id' => $processId])->limit(1)->one();
@@ -108,16 +118,22 @@ class ParsedomainLinks extends \yii\db\ActiveRecord
 
     public function saveOrDelete($data = [])
     {
+        if (!empty(self::isAlreadyLink($this->domain->id, $data['link']))) {
+            return false;
+        }
+
         if (!empty($data)) {
             foreach ($data as $k => $v) {
                 $this->$k = $v;
             }
         }
+
 //        $this->status = ParsedomainLinks::TYPE_NOT_PARSED;
 //        $this->begin_date = self:: ZERO_DATE;
 //        $this->process_id = 0;
 
         if(!$this->save()) {
+            var_dump($this->errors);
             $this->delete();
             return false;
         }
@@ -128,9 +144,25 @@ class ParsedomainLinks extends \yii\db\ActiveRecord
     public static function cleanNotFinished($domainId)
     {
         self::getDb()->createCommand(
-            'UPDATE ' . self::tableName() . ' SET status = ' . self::TYPE_NOT_PARSED
-            . ', process_id = ' . self::TYPE_NOT_PARSED . ', begin_date = "' . self:: ZERO_DATE . '"'
-            . ' WHERE status = ' . self::TYPE_PROCESS . ' AND domain_id = ' . $domainId
+            "UPDATE " . self::tableName() . " SET status = " . self::TYPE_NOT_PARSED
+            . ", process_id = " . self::TYPE_NOT_PARSED . ", begin_date = '" . self:: ZERO_DATE . "'"
+            . " WHERE status = '" . self::TYPE_PROCESS . "' AND domain_id = " . $domainId
         )->execute();
+    }
+
+    public static function isAlreadyLink($domainId, $link)
+    {
+        return self::find()->where(['domain_id' => $domainId, 'link' => $link])->limit(1)->one();
+    }
+
+    public static function isLinkInExcept($href)
+    {
+        foreach (self::$exceptions as $exc) {
+            if (strpos($href, $exc) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

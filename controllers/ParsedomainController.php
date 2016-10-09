@@ -76,7 +76,13 @@ class ParsedomainController extends Controller
         $link = ParsedomainLinks::find()->where(['domain_id' => $domain->id])->limit(1)->one();
 
         if(empty($link)) {
-            ParsedomainLinks::createRow(['domain_id' => $domain->id, 'link' => $domain->domain]);
+            ParsedomainLinks::createRow(
+                [
+                    'domain_id' => $domain->id,
+                    'link' => $domain->domain,
+                    'create_date' => date('Y-m-d H:i:s')
+                ]
+            );
             echo PHP_EOL. "created first link for parse". PHP_EOL;
             return;
         }
@@ -93,10 +99,10 @@ class ParsedomainController extends Controller
             if (!is_null($link)) {
 //                $cr = new \vova07\console\ConsoleRunner(['file' => '@runnerScript']);
 //                $cr->run("parsedomain/parsedomain/grab-links {$params['domainId']}");
-//            }
+            }
 //        }
 
-        $someForParse = ParserLinks::find()->where(
+        $someForParse = ParsedomainLinks::find()->where(
             'status != :status AND domain_id = :domain_id',
             [':status' => ParsedomainLinks::TYPE_PARSED, ':domain_id' => $domain->id]
         )->limit(1)->one();
